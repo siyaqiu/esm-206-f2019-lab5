@@ -9,3 +9,158 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+if working with others, commit and pull will show me if there's any conflict I need to address. 
+
+#### Lab 5 objectives 
+- Learn to parse dates with "lubridate"
+- Get counts of obs with count()
+- Uncount() rows
+- One and two sample t-test
+- creast a heatmap with geom_title()
+
+```{r, include = FALSE}
+#attach packages
+library(tidyverse)
+library(janitor)
+library(here)
+```
+
+```{r, include = FALSE}
+# read in data
+lobster_abundance <- read_csv(here::here("data", "lobster_abundance.csv"),
+                              na = "-99999") %>%
+  clean_names()
+  
+```
+
+Use tidyr::uncount() to convert our lobstor data from frequency format to case format
+
+```{r}
+lobster_tidy <- lobster_abundance %>% 
+  uncount(lobster_count)
+```
+
+### exploratory data visualization 
+
+We're going to consider "site" as our variable of interest
+
+```{r}
+
+ggplot(lobster_tidy, aes(x = site, y = size_mm)) +
+  geom_jitter(aes(color = site), 
+              alpha = 0.5,
+              width = 0.2)
+
+# histogram
+ggplot(lobster_tidy, aes(x = size_mm)) + 
+  geom_histogram(aes(fill = site)) + 
+  facet_wrap(~site, scales = "free")
+
+ggplot(lobster_tidy, aes(sample = size_mm)) + 
+  geom_qq() + 
+  facet_wrap(~site)
+```
+
+#### Convert the date column to class "Date"
+
+We'll use the "lubridate" package to convert to Date format, and then to help us easily parse month & year
+
+```{r}
+lobster_date = lobster_tidy %>% 
+  mutate(date_new = lubridate::mdy(date))
+```
+
+Now let's parse month year using lubridate::month lubridate::year
+```{r}
+
+lobster_parse_data <- lobster_date %>% 
+  mutate(
+    obs_month = lubridate::month(date_new, label = TRUE), 
+    obs_year = lubridate::year(date_new)
+  )
+
+```
+
+New let's find counts of lobsters based on different hirerarchical grouping:
+
+first let's counts lobstrs by year and month 
+```{r}
+lobster_yr <- lobster_parse_data %>%
+  count(obs_month, obs_year)
+
+lobster_y <- lobster_parse_data %>% 
+  count(obs_year)
+
+lobster_site <-  lobster_parse_data %>% 
+  count(site)
+
+# tidy data every obs has its own row, we can decide how to group data 
+```
+
+If we want to create a summary table contains statistics  OTHER than counts by group, it's easier to use group_by() + n()
+```{r}
+lobster_summary <- lobster_parse_data %>% 
+  group_by(site) %>% 
+  summarize(
+    mean_size = mean(size_mm, na.rm = TRUE),
+    sd_size = sd(size_mm, na.rm = TRUE),
+    lobster_num = n()
+  )
+
+lobster_summary
+```
+
+#### Find CI
+
+Use t.test() to find CI and perform t-test to compare means of two samples
+```{r}
+ivee_lobster <- lobster_tidy %>% 
+  filter(site == "IVEE") %>% 
+  pull(size_mm)
+t.test(ivee_lobster)
+```
+
+#### Two sample t-test to compare means 
+
+We want to ask is there is any sig diff in lobster lengths at Naples, and Mohawk reafs?
+
+we've done our necessary exploratory analysis to determine that a 2-sample t-test for means comparison is approprate. 
+
+```{r}
+
+napl_sample <- lobster_tidy %>% 
+  filter(site == "NAPL") %>% 
+  pull("size_mm")
+
+mohk_sample <- lobster_tidy %>% 
+  filter(site == "MOHK") %>% 
+  pull("size_mm")
+
+mn_ttest <- t.test(mohk_sample, napl_sample)
+mn_ttest
+```
+
+there is a sig diff in lobs lengths between Napl, and Mahk
+
+```{r}
+lobster_mn <- lobster_tidy %>% 
+  filter(site %in% c("NAPL", "MOHK"))
+
+mn_ttest2 <- t.test(size_mm ~ site, data = lobster_mn)
+mn_ttest2
+```
+
+Here is the p value :  `r mn_ttest2$p.value`
+
+
+Here is the t statistics: `r mn_ttest2$statistic`
+
+#### Now a heatmap
+```{r}
+lobster_ys <- lobster_parse_data %>% 
+  count(obs_year, site)
+
+ggplot(lobster_ys, aes(x = obs_year, y = site)) + 
+  geom_tile(aes(fill = n))
+```
+
